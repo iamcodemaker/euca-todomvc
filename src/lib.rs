@@ -4,6 +4,8 @@ use cfg_if::cfg_if;
 use log::{debug,info};
 use euca::app::*;
 use euca::dom;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 cfg_if! {
     if #[cfg(feature = "console_error_panic_hook")] {
@@ -52,10 +54,15 @@ enum Message {
     AddTodo,
     RemoveTodo(usize),
     ToggleTodo(usize),
+    EditTodo(usize),
+    FocusEdit,
+    UpdateEdit(String),
+    SaveEdit,
+    AbortEdit,
 }
 
 impl Update<Message> for Todo {
-    fn update(&mut self, msg: Message, _cmds: &mut Commands<Message>) {
+    fn update(&mut self, msg: Message, cmds: &mut Commands<Message>) {
         use Message::*;
 
         match msg {
@@ -76,7 +83,58 @@ impl Update<Message> for Todo {
             ToggleTodo(i) => {
                 self.items[i].is_complete = !self.items[i].is_complete;
             }
+            EditTodo(i) => {
+                self.pending_edit = Some((i, self.items[i].text.clone()));
+                self.update(FocusEdit, cmds);
+            }
+            cmd @ FocusEdit => {
+                cmds.push(Command::new(cmd, focus_edit_input));
+            }
+            UpdateEdit(text) => {
+                match self.pending_edit {
+                    Some((_, ref mut pending_text)) => {
+                        *pending_text = text;
+                    }
+                    _ => panic!("SaveEdit called with no pending edit"),
+                }
+            }
+            SaveEdit => {
+                match self.pending_edit {
+                    Some((i, ref text)) => {
+                        if text.trim().is_empty() {
+                            self.update(RemoveTodo(i), cmds);
+                        }
+                        else {
+                            self.items[i].text = text.trim().to_owned();
+                        }
+                        self.pending_edit = None;
+                    }
+                    _ => panic!("SaveEdit called with no pending edit"),
+                }
+            }
+            AbortEdit => {
+                self.pending_edit = None;
+            }
         }
+    }
+}
+
+fn focus_edit_input(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
+    match msg {
+        Message::FocusEdit => {
+            let edit_input = web_sys::window()
+                .expect("couldn't get window handle")
+                .document()
+                .expect("couldn't get document handle")
+                .query_selector("section.todoapp section.main input.edit")
+                .expect("error querying for element")
+                .expect("expected to find an input element")
+                .dyn_into::<web_sys::HtmlInputElement>()
+                .expect_throw("expected web_sys::HtmlInputElement");
+
+            edit_input.focus().expect_throw("error focusing input");
+        }
+        _ => unreachable!("focus_edit_input should only be called with FocusEdit. Called with: {:?}", msg),
     }
 }
 
@@ -160,13 +218,28 @@ impl Render<dom::DomVec<Message>> for Todo {
 impl Item {
     fn render(&self, i: usize, pending_edit: Option<&str>) -> dom::Dom<Message> {
         use dom::Dom;
+        use dom::Handler::{Event,InputValue};
 
         let e = Dom::elem("li");
 
         if let Some(pending_edit) = pending_edit {
-            Dom::elem("input")
-                .attr("class", "edit")
-                .attr("value", pending_edit)
+            e.attr("class", "editing")
+                .push(Dom::elem("input")
+                    .attr("class", "edit")
+                    .attr("value", pending_edit)
+                    .on("input", InputValue(|s| {
+                        Message::UpdateEdit(s)
+                    }))
+                    .event("blur", Message::SaveEdit)
+                    .on("keyup", Event(|e| {
+                        let e = e.dyn_into::<web_sys::KeyboardEvent>().expect_throw("expected web_sys::KeyboardEvent");
+                        match e.key().as_ref() {
+                            "Enter" => Message::SaveEdit,
+                            "Escape" => Message::AbortEdit,
+                            _ => Message::Noop,
+                        }
+                    }))
+                )
         }
         else {
             let e = e.push(
@@ -180,6 +253,7 @@ impl Item {
                     )
                     .push(Dom::elem("label")
                         .push(self.text.to_owned())
+                        .event("dblclick", Message::EditTodo(i))
                     )
                     .push(Dom::elem("button")
                         .attr("class", "destroy")
@@ -258,5 +332,58 @@ mod tests {
         todomvc.update(Message::ToggleTodo(0), &mut cmds);
 
         assert_eq!(todomvc.items[0].is_complete, true);
+    }
+
+    #[test]
+    fn save_edit_removes_empty() {
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item {
+            text: "text".to_owned(),
+            .. Item::default()
+        });
+
+        let mut cmds = vec![];
+
+        todomvc.update(Message::EditTodo(0), &mut cmds);
+        todomvc.update(Message::UpdateEdit("".to_owned()), &mut cmds);
+        todomvc.update(Message::SaveEdit, &mut cmds);
+
+        assert_eq!(todomvc.items.len(), 0);
+    }
+
+    #[test]
+    fn save_edit_trims_whitespace() {
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item {
+            text: "text".to_owned(),
+            .. Item::default()
+        });
+
+        let mut cmds = vec![];
+
+        todomvc.update(Message::EditTodo(0), &mut cmds);
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut cmds);
+        todomvc.update(Message::SaveEdit, &mut cmds);
+
+        assert_eq!(todomvc.items.len(), 1);
+        assert_eq!(todomvc.items[0].text, "edited text");
+    }
+
+    #[test]
+    fn abort_edit_does_not_modify() {
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item {
+            text: "text".to_owned(),
+            .. Item::default()
+        });
+
+        let mut cmds = vec![];
+
+        todomvc.update(Message::EditTodo(0), &mut cmds);
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut cmds);
+        todomvc.update(Message::AbortEdit, &mut cmds);
+
+        assert_eq!(todomvc.items.len(), 1);
+        assert_eq!(todomvc.items[0].text, "text");
     }
 }
