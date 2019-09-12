@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "build": "wasm-pack build --target web",
     "start": "http-server ./ -a localhost -c-1"
   },
   "dependencies": {
