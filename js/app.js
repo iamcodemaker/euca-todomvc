@@ -1,6 +1,6 @@
+var euca_todomvc = import('../pkg/euca_todomvc.js');
+
 (function (window) {
 	'use strict';
-
-	// Your starting point. Enjoy the ride!
-
+	euca_todomvc.then(app => app.default());
 })(window);
