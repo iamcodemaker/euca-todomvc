@@ -1,0 +1,13 @@
+[package]
+name = "euca-todomvc"
+version = "0.1.0"
+authors = ["Matthew Nicholson <matt@matt-land.com>"]
+edition = "2018"
+description = "Euca • TodoMVC"
+repository = "https://github.com/iamcodemaker/euca-todomvc"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2.50"
