@@ -125,11 +125,13 @@ impl Render<dom::DomVec<Message>> for Todo {
                 .push(Dom::elem("ul")
                     .attr("class", "todo-list")
                     .extend(self.items.iter().enumerate().map(|(i, item)| {
-                        if let Some((i, ref pending_edit)) = self.pending_edit {
-                            item.render(i, Some(pending_edit))
-                        }
-                        else {
-                            item.render(i, None)
+                        match self.pending_edit {
+                            Some((pending_i, ref pending_edit)) if pending_i == i => {
+                                item.render(i, Some(pending_edit))
+                            }
+                            Some(_) | None =>  {
+                                item.render(i, None)
+                            }
                         }
                     }))
                 )
