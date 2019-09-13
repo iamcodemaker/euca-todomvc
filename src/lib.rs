@@ -1,12 +1,14 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use cfg_if::cfg_if;
-use log::{debug,info};
+use log::{debug,info,error};
 use euca::app::*;
 use euca::route::Route;
 use euca::dom;
 use std::rc::Rc;
 use std::cell::RefCell;
+use serde::{Serialize,Deserialize};
+use serde_json;
 
 cfg_if! {
     if #[cfg(feature = "console_error_panic_hook")] {
@@ -58,9 +60,20 @@ struct Todo {
     filter: Filter,
 }
 
-#[derive(Default)]
+impl Todo {
+    fn with_items(items: Vec<Item>) -> Self {
+        Todo {
+            items: items,
+            .. Todo::default()
+        }
+    }
+}
+
+#[derive(Default,Serialize,Deserialize)]
 struct Item {
+    #[serde(rename = "title")]
     text: String,
+    #[serde(rename = "completed")]
     is_complete: bool,
 }
 
@@ -83,6 +96,8 @@ enum Message {
     ShowActive(bool),
     ShowCompleted(bool),
     PushHistory(String),
+    ItemsChanged,
+    UpdateStorage(String),
 }
 
 impl Update<Message> for Todo {
@@ -103,12 +118,15 @@ impl Update<Message> for Todo {
                     .. Item::default()
                 });
                 self.pending_item.clear();
+                self.update(ItemsChanged, cmds);
             }
             RemoveTodo(i) => {
                 self.items.remove(i);
+                self.update(ItemsChanged, cmds);
             }
             ToggleTodo(i) => {
                 self.items[i].is_complete = !self.items[i].is_complete;
+                self.update(ItemsChanged, cmds);
             }
             EditTodo(i) => {
                 self.pending_edit = Some((i, self.items[i].text.clone()));
@@ -138,12 +156,14 @@ impl Update<Message> for Todo {
                     }
                     _ => panic!("SaveEdit called with no pending edit"),
                 }
+                self.update(ItemsChanged, cmds);
             }
             AbortEdit => {
                 self.pending_edit = None;
             }
             ClearCompleted => {
                 self.items.retain(|item| !item.is_complete);
+                self.update(ItemsChanged, cmds);
             }
             ToggleAll => {
                 let all_complete = self.items.iter().all(|item| item.is_complete);
@@ -151,6 +171,8 @@ impl Update<Message> for Todo {
                 for item in self.items.iter_mut() {
                     item.is_complete = !all_complete;
                 }
+
+                self.update(ItemsChanged, cmds);
             }
             ShowAll(push_history) => {
                 self.filter = Filter::All;
@@ -172,6 +194,12 @@ impl Update<Message> for Todo {
             }
             cmd @ PushHistory(_) => {
                 cmds.push(Command::new(cmd, update_history));
+            }
+            ItemsChanged => {
+                self.update(UpdateStorage(serde_json::to_string(&self.items).unwrap()), cmds);
+            }
+            cmd @ UpdateStorage(_) => {
+                cmds.push(Command::new(cmd, update_storage));
             }
         }
     }
@@ -227,6 +255,41 @@ fn update_history(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
         }
         _ => unreachable!("this should only be called with PushHistory. Called with: {:?}", msg),
     }
+}
+
+fn update_storage(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
+    let local_storage = web_sys::window()
+        .expect("couldn't get window handle")
+        .local_storage()
+        .expect("couldn't get local storage handle")
+        .expect_throw("local storage not supported?");
+
+    match msg {
+        Message::UpdateStorage(data) => {
+            local_storage.set_item("todo-euca", &data).unwrap_throw();
+        }
+        _ => unreachable!("this should only be called with UpdateStorage. Called with: {:?}", msg),
+    }
+}
+
+fn read_items_from_storage() -> Vec<Item> {
+    let local_storage = web_sys::window()
+        .expect("couldn't get window handle")
+        .local_storage()
+        .expect("couldn't get local storage handle")
+        .expect_throw("local storage not supported?");
+
+    local_storage.get_item("todo-euca")
+        .expect_throw("error reading from storage")
+        .map_or(vec![], |items|
+            match serde_json::from_str(&items) {
+                Ok(items) => items,
+                Err(e) => {
+                    error!("error reading items from storage: {}", e);
+                    vec![]
+                }
+            }
+        )
 }
 
 impl Render<dom::DomVec<Message>> for Todo {
@@ -460,9 +523,11 @@ pub fn main() -> Result<(), JsValue> {
         .expect("error querying for element")
         .expect("expected <section class=\"todoapp\"></section>");
 
+    let items = read_items_from_storage();
+
     let app = AppBuilder::default()
         .router(Router::default())
-        .attach(parent, Todo::default());
+        .attach(parent, Todo::with_items(items));
 
     App::dispatch(app, Message::FocusPending);
 
@@ -630,5 +695,45 @@ mod tests {
         assert_eq!(router.route("http://localhost:8080/#/"), Some(ShowAll(false)));
         assert_eq!(router.route("http://localhost:8080/#/active"), Some(ShowActive(false)));
         assert_eq!(router.route("http://localhost:8080/#/completed"), Some(ShowCompleted(false)));
+    }
+
+    #[test]
+    fn storage_triggers() {
+        use Message::*;
+
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item::default());
+        todomvc.items.push(Item::default());
+        todomvc.items.push(Item::default());
+
+        // ensure the following message types generate UpdateStorage commands
+        for msg in &[
+            AddTodo,
+            RemoveTodo(0),
+            ToggleTodo(0),
+            SaveEdit,
+            ClearCompleted,
+            ToggleAll,
+            ItemsChanged,
+            UpdateStorage("".to_owned())
+        ] {
+            // do necessary prep work
+            match msg {
+                SaveEdit => todomvc.update(EditTodo(0), &mut vec![]),
+                _ => {}
+            }
+
+            let mut cmds = vec![];
+            todomvc.update(msg.clone(), &mut cmds);
+
+            // verify the proper commands was generated
+            assert!(
+                cmds.iter().any(|cmd| match cmd.msg {
+                    UpdateStorage(_) => true,
+                    _ => false,
+                }),
+                "didn't find UpdateStorage for {:?}", msg
+            );
+        }
     }
 }
