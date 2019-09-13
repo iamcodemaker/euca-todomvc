@@ -27,4 +27,5 @@ features = [
   'Document',
   'Window',
   'KeyboardEvent',
+  'History',
 ]

@@ -3,6 +3,7 @@ use wasm_bindgen::JsCast;
 use cfg_if::cfg_if;
 use log::{debug,info};
 use euca::app::*;
+use euca::route::Route;
 use euca::dom;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -78,9 +79,10 @@ enum Message {
     AbortEdit,
     ClearCompleted,
     ToggleAll,
-    ShowAll,
-    ShowActive,
-    ShowCompleted,
+    ShowAll(bool),
+    ShowActive(bool),
+    ShowCompleted(bool),
+    PushHistory(String),
 }
 
 impl Update<Message> for Todo {
@@ -150,14 +152,26 @@ impl Update<Message> for Todo {
                     item.is_complete = !all_complete;
                 }
             }
-            ShowAll => {
+            ShowAll(push_history) => {
                 self.filter = Filter::All;
+                if push_history {
+                    self.update(Message::PushHistory("#/".to_owned()), cmds);
+                }
             }
-            ShowActive => {
+            ShowActive(push_history) => {
                 self.filter = Filter::Active;
+                if push_history {
+                    self.update(Message::PushHistory("#/active".to_owned()), cmds);
+                }
             }
-            ShowCompleted => {
+            ShowCompleted(push_history) => {
                 self.filter = Filter::Completed;
+                if push_history {
+                    self.update(Message::PushHistory("#/completed".to_owned()), cmds);
+                }
+            }
+            cmd @ PushHistory(_) => {
+                cmds.push(Command::new(cmd, update_history));
             }
         }
     }
@@ -198,6 +212,20 @@ fn focus_edit_input(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
             edit_input.focus().expect_throw("error focusing input");
         }
         _ => unreachable!("focus_edit_input should only be called with FocusEdit. Called with: {:?}", msg),
+    }
+}
+
+fn update_history(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
+    let history = web_sys::window()
+        .expect("couldn't get window handle")
+        .history()
+        .expect_throw("couldn't get history handle");
+
+    match msg {
+        Message::PushHistory(url) => {
+            history.push_state_with_url(&JsValue::NULL, TITLE, Some(&url)).expect_throw("error updating history");
+        }
+        _ => unreachable!("this should only be called with PushHistory. Called with: {:?}", msg),
     }
 }
 
@@ -295,7 +323,7 @@ impl Render<dom::DomVec<Message>> for Todo {
                                 .push("All")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowAll
+                                    Message::ShowAll(true)
                                 }))
                             )
                         )
@@ -309,7 +337,7 @@ impl Render<dom::DomVec<Message>> for Todo {
                                 .push("Active")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowActive
+                                    Message::ShowActive(true)
                                 }))
                             )
                         )
@@ -323,7 +351,7 @@ impl Render<dom::DomVec<Message>> for Todo {
                                 .push("Completed")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowCompleted
+                                    Message::ShowCompleted(true)
                                 }))
                             )
                         )
@@ -402,6 +430,23 @@ impl Item {
     }
 }
 
+#[derive(Default)]
+struct Router {}
+
+impl Route<Message> for Router {
+    fn route(&self, url: &str) -> Option<Message> {
+        if url.ends_with("#/active") {
+            Some(Message::ShowActive(false))
+        }
+        else if url.ends_with("#/completed") {
+            Some(Message::ShowCompleted(false))
+        }
+        else {
+            Some(Message::ShowAll(false))
+        }
+    }
+}
+
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
     init_log();
@@ -416,6 +461,7 @@ pub fn main() -> Result<(), JsValue> {
         .expect("expected <section class=\"todoapp\"></section>");
 
     let app = AppBuilder::default()
+        .router(Router::default())
         .attach(parent, Todo::default());
 
     App::dispatch(app, Message::FocusPending);
@@ -570,5 +616,19 @@ mod tests {
 
         todomvc.update(Message::ToggleAll, &mut cmds);
         assert!(todomvc.items.iter().all(|item| !item.is_complete));
+    }
+
+    #[test]
+    fn test_routes() {
+        use Message::*;
+
+        let router = Router::default();
+
+        assert_eq!(router.route("http://localhost:8080"), Some(ShowAll(false)));
+        assert_eq!(router.route("http://localhost:8080/"), Some(ShowAll(false)));
+        assert_eq!(router.route("http://localhost:8080/#/"), Some(ShowAll(false)));
+        assert_eq!(router.route("http://localhost:8080/#/"), Some(ShowAll(false)));
+        assert_eq!(router.route("http://localhost:8080/#/active"), Some(ShowActive(false)));
+        assert_eq!(router.route("http://localhost:8080/#/completed"), Some(ShowCompleted(false)));
     }
 }
