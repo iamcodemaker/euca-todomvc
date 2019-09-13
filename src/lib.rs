@@ -61,6 +61,7 @@ enum Message {
     SaveEdit,
     AbortEdit,
     ClearCompleted,
+    ToggleAll,
 }
 
 impl Update<Message> for Todo {
@@ -122,6 +123,13 @@ impl Update<Message> for Todo {
             }
             ClearCompleted => {
                 self.items.retain(|item| !item.is_complete);
+            }
+            ToggleAll => {
+                let all_complete = self.items.iter().all(|item| item.is_complete);
+
+                for item in self.items.iter_mut() {
+                    item.is_complete = !all_complete;
+                }
             }
         }
     }
@@ -202,6 +210,8 @@ impl Render<dom::DomVec<Message>> for Todo {
                     .attr("id", "toggle-all")
                     .attr("class", "toggle-all")
                     .attr("type", "checkbox")
+                    .attr("checked", self.items.iter().all(|item| item.is_complete).to_string())
+                    .event("change", Message::ToggleAll)
                 )
                 .push(Dom::elem("label")
                     .attr("for", "toggle-all")
@@ -451,5 +461,31 @@ mod tests {
         assert_eq!(todomvc.items.len(), 2);
         assert_eq!(todomvc.items[0].text, "text1");
         assert_eq!(todomvc.items[1].text, "text3");
+    }
+
+    #[test]
+    fn toggle_all() {
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item {
+            text: "text1".to_owned(),
+            .. Item::default()
+        });
+        todomvc.items.push(Item {
+            text: "text2".to_owned(),
+            is_complete: true,
+            .. Item::default()
+        });
+        todomvc.items.push(Item {
+            text: "text3".to_owned(),
+            .. Item::default()
+        });
+
+        let mut cmds = vec![];
+
+        todomvc.update(Message::ToggleAll, &mut cmds);
+        assert!(todomvc.items.iter().all(|item| item.is_complete));
+
+        todomvc.update(Message::ToggleAll, &mut cmds);
+        assert!(todomvc.items.iter().all(|item| !item.is_complete));
     }
 }
