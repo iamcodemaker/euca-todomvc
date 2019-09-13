@@ -122,7 +122,7 @@ impl Update<Message> for Todo {
                     Some((_, ref mut pending_text)) => {
                         *pending_text = text;
                     }
-                    _ => panic!("SaveEdit called with no pending edit"),
+                    _ => panic!("UpdateEdit called with no pending edit"),
                 }
             }
             SaveEdit => {

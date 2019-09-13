@@ -28,4 +28,5 @@ features = [
   'Window',
   'KeyboardEvent',
   'History',
+  'Storage',
 ]
