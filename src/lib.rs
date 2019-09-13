@@ -362,15 +362,19 @@ impl Render<dom::DomVec<Message>> for Todo {
 
             // todo footer
             vec.push({
+                let remaining = self.items.iter()
+                    .filter(|item| !item.is_complete)
+                    .count();
+
                 let footer = Dom::elem("footer")
                     .attr("class", "footer")
                     .push(Dom::elem("span")
                         .attr("class", "todo-count")
                         .push(Dom::elem("strong")
-                            .push(self.items.len().to_string())
+                            .push(remaining.to_string())
                         )
                         .push(
-                            if self.items.len() == 1 { " item left" }
+                            if remaining == 1 { " item left" }
                             else { " items left" }
                         )
                     )
