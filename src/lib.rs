@@ -50,6 +50,7 @@ struct Item {
 #[derive(PartialEq,Clone,Debug)]
 enum Message {
     Noop,
+    FocusPending,
     UpdatePending(String),
     AddTodo,
     RemoveTodo(usize),
@@ -67,6 +68,9 @@ impl Update<Message> for Todo {
 
         match msg {
             Noop => {}
+            cmd @ FocusPending => {
+                cmds.push(Command::new(cmd, focus_pending_input));
+            }
             UpdatePending(text) => {
                 self.pending_item = text
             }
@@ -116,6 +120,25 @@ impl Update<Message> for Todo {
                 self.pending_edit = None;
             }
         }
+    }
+}
+
+fn focus_pending_input(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
+    match msg {
+        Message::FocusPending => {
+            let pending_input = web_sys::window()
+                .expect("couldn't get window handle")
+                .document()
+                .expect("couldn't get document handle")
+                .query_selector("section.todoapp header.header input.new-todo")
+                .expect("error querying for element")
+                .expect("expected to find an input element")
+                .dyn_into::<web_sys::HtmlInputElement>()
+                .expect_throw("expected web_sys::HtmlInputElement");
+
+            pending_input.focus().expect_throw("error focusing input");
+        }
+        _ => unreachable!("focus_pending_input should only be called with FocusPending. Called with: {:?}", msg),
     }
 }
 
@@ -284,8 +307,10 @@ pub fn main() -> Result<(), JsValue> {
         .expect("error querying for element")
         .expect("expected <section class=\"todoapp\"></section>");
 
-    AppBuilder::default()
+    let app = AppBuilder::default()
         .attach(parent, Todo::default());
+
+    App::dispatch(app, Message::FocusPending);
 
     info!("Euca • TodoMVC initialized");
     
