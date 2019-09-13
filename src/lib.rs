@@ -36,11 +36,24 @@ cfg_if! {
 
 const TITLE: &str = "Euca • TodoMVC";
 
+enum Filter {
+    All,
+    Active,
+    Completed,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Filter::All
+    }
+}
+
 #[derive(Default)]
 struct Todo {
     pending_item: String,
     items: Vec<Item>,
     pending_edit: Option<(usize, String)>,
+    filter: Filter,
 }
 
 #[derive(Default)]
@@ -64,6 +77,9 @@ enum Message {
     AbortEdit,
     ClearCompleted,
     ToggleAll,
+    ShowAll,
+    ShowActive,
+    ShowCompleted,
 }
 
 impl Update<Message> for Todo {
@@ -132,6 +148,15 @@ impl Update<Message> for Todo {
                 for item in self.items.iter_mut() {
                     item.is_complete = !all_complete;
                 }
+            }
+            ShowAll => {
+                self.filter = Filter::All;
+            }
+            ShowActive => {
+                self.filter = Filter::Active;
+            }
+            ShowCompleted => {
+                self.filter = Filter::Completed;
             }
         }
     }
@@ -221,16 +246,25 @@ impl Render<dom::DomVec<Message>> for Todo {
                 )
                 .push(Dom::elem("ul")
                     .attr("class", "todo-list")
-                    .extend(self.items.iter().enumerate().map(|(i, item)| {
-                        match self.pending_edit {
-                            Some((pending_i, ref pending_edit)) if pending_i == i => {
-                                item.render(i, Some(pending_edit))
+                    .extend(self.items.iter()
+                        .filter(|item| {
+                            match self.filter {
+                                Filter::All => true,
+                                Filter::Active => !item.is_complete,
+                                Filter::Completed => item.is_complete,
                             }
-                            Some(_) | None =>  {
-                                item.render(i, None)
+                        })
+                        .enumerate().map(|(i, item)| {
+                            match self.pending_edit {
+                                Some((pending_i, ref pending_edit)) if pending_i == i => {
+                                    item.render(i, Some(pending_edit))
+                                }
+                                Some(_) | None =>  {
+                                    item.render(i, None)
+                                }
                             }
-                        }
-                    }))
+                        })
+                    )
                 )
             );
 
@@ -247,7 +281,41 @@ impl Render<dom::DomVec<Message>> for Todo {
                             if self.items.len() == 1 { " item left" }
                             else { " items left" }
                         )
-                    );
+                    )
+                    .push(Dom::elem("ul")
+                        .attr("class", "filters")
+                        .push(Dom::elem("li")
+                            .push(Dom::elem("a")
+                                .attr("href", "#/")
+                                .push("All")
+                                .on("click", Event(|e| {
+                                    e.prevent_default();
+                                    Message::ShowAll
+                                }))
+                            )
+                        )
+                        .push(Dom::elem("li")
+                            .push(Dom::elem("a")
+                                .attr("href", "#/active")
+                                .push("Active")
+                                .on("click", Event(|e| {
+                                    e.prevent_default();
+                                    Message::ShowActive
+                                }))
+                            )
+                        )
+                        .push(Dom::elem("li")
+                            .push(Dom::elem("a")
+                                .attr("href", "#/completed")
+                                .push("Completed")
+                                .on("click", Event(|e| {
+                                    e.prevent_default();
+                                    Message::ShowCompleted
+                                }))
+                            )
+                        )
+                    )
+                ;
                 if self.items.iter().any(|item| item.is_complete) {
                     footer.push(Dom::elem("button")
                         .attr("class", "clear-completed")
