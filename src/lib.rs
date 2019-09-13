@@ -60,6 +60,7 @@ enum Message {
     UpdateEdit(String),
     SaveEdit,
     AbortEdit,
+    ClearCompleted,
 }
 
 impl Update<Message> for Todo {
@@ -118,6 +119,9 @@ impl Update<Message> for Todo {
             }
             AbortEdit => {
                 self.pending_edit = None;
+            }
+            ClearCompleted => {
+                self.items.retain(|item| !item.is_complete);
             }
         }
     }
@@ -219,19 +223,30 @@ impl Render<dom::DomVec<Message>> for Todo {
             );
 
             // todo footer
-            vec.push(Dom::elem("footer")
-                .attr("class", "footer")
-                .push(Dom::elem("span")
-                    .attr("class", "todo-count")
-                    .push(Dom::elem("strong")
-                        .push(self.items.len().to_string())
+            vec.push({
+                let footer = Dom::elem("footer")
+                    .attr("class", "footer")
+                    .push(Dom::elem("span")
+                        .attr("class", "todo-count")
+                        .push(Dom::elem("strong")
+                            .push(self.items.len().to_string())
+                        )
+                        .push(
+                            if self.items.len() == 1 { " item left" }
+                            else { " items left" }
+                        )
+                    );
+                if self.items.iter().any(|item| item.is_complete) {
+                    footer.push(Dom::elem("button")
+                        .attr("class", "clear-completed")
+                        .push("Clear completed")
+                        .event("click", Message::ClearCompleted)
                     )
-                    .push(
-                        if self.items.len() == 1 { " item left" }
-                        else { " items left" }
-                    )
-                )
-            );
+                }
+                else {
+                    footer
+                }
+            });
         }
 
         vec.into()
@@ -410,5 +425,31 @@ mod tests {
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "text");
+    }
+
+    #[test]
+    fn clear_completed() {
+        let mut todomvc = Todo::default();
+        todomvc.items.push(Item {
+            text: "text1".to_owned(),
+            .. Item::default()
+        });
+        todomvc.items.push(Item {
+            text: "text2".to_owned(),
+            is_complete: true,
+            .. Item::default()
+        });
+        todomvc.items.push(Item {
+            text: "text3".to_owned(),
+            .. Item::default()
+        });
+
+        let mut cmds = vec![];
+
+        todomvc.update(Message::ClearCompleted, &mut cmds);
+
+        assert_eq!(todomvc.items.len(), 2);
+        assert_eq!(todomvc.items[0].text, "text1");
+        assert_eq!(todomvc.items[1].text, "text3");
     }
 }
