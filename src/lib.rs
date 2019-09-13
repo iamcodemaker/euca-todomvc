@@ -34,6 +34,8 @@ cfg_if! {
     }
 }
 
+const TITLE: &str = "Euca • TodoMVC";
+
 #[derive(Default)]
 struct Todo {
     pending_item: String,
@@ -337,7 +339,7 @@ pub fn main() -> Result<(), JsValue> {
 
     App::dispatch(app, Message::FocusPending);
 
-    info!("Euca • TodoMVC initialized");
+    info!("{} initialized", TITLE);
     
     Ok(())
 }
