@@ -36,6 +36,7 @@ cfg_if! {
 
 const TITLE: &str = "Euca • TodoMVC";
 
+#[derive(PartialEq)]
 enum Filter {
     All,
     Active,
@@ -287,6 +288,10 @@ impl Render<dom::DomVec<Message>> for Todo {
                         .push(Dom::elem("li")
                             .push(Dom::elem("a")
                                 .attr("href", "#/")
+                                .attr("class",
+                                    if self.filter == Filter::All { "selected" }
+                                    else { "" }
+                                 )
                                 .push("All")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
@@ -297,6 +302,10 @@ impl Render<dom::DomVec<Message>> for Todo {
                         .push(Dom::elem("li")
                             .push(Dom::elem("a")
                                 .attr("href", "#/active")
+                                .attr("class",
+                                    if self.filter == Filter::Active { "selected" }
+                                    else { "" }
+                                 )
                                 .push("Active")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
@@ -307,6 +316,10 @@ impl Render<dom::DomVec<Message>> for Todo {
                         .push(Dom::elem("li")
                             .push(Dom::elem("a")
                                 .attr("href", "#/completed")
+                                .attr("class",
+                                    if self.filter == Filter::Completed { "selected" }
+                                    else { "" }
+                                 )
                                 .push("Completed")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
