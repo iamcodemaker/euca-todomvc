@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+
+fd -e toml -e rs "" . ../euca | entr npm run build &
+live-server ./ --host=localhost --watch=pkg/,index.html --no-browser

@@ -2,14 +2,14 @@
   "private": true,
   "scripts": {
     "build": "wasm-pack build --target web",
-    "start": "http-server ./ -a localhost -c-1",
-    "test": "cargo test"
+    "test": "cargo test",
+    "watch": "script/watch"
   },
   "dependencies": {
     "todomvc-app-css": "^2.0.0",
     "todomvc-common": "^1.0.0"
   },
   "devDependencies": {
-    "http-server": "^0.11.1"
+    "live-server": "^1.2.1"
   }
 }
