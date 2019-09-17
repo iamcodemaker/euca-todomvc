@@ -5,8 +5,6 @@ use log::{debug,info,error};
 use euca::app::*;
 use euca::route::Route;
 use euca::dom;
-use std::rc::Rc;
-use std::cell::RefCell;
 use serde::{Serialize,Deserialize};
 use serde_json;
 
@@ -80,13 +78,11 @@ struct Item {
 #[derive(PartialEq,Clone,Debug)]
 enum Message {
     Noop,
-    FocusPending,
     UpdatePending(String),
     AddTodo,
     RemoveTodo(usize),
     ToggleTodo(usize),
     EditTodo(usize),
-    FocusEdit,
     UpdateEdit(String),
     SaveEdit,
     AbortEdit,
@@ -95,20 +91,22 @@ enum Message {
     ShowAll(bool),
     ShowActive(bool),
     ShowCompleted(bool),
-    PushHistory(String),
     ItemsChanged,
+}
+
+enum Command {
+    FocusPending,
+    FocusEdit,
+    PushHistory(String),
     UpdateStorage(String),
 }
 
-impl Update<Message> for Todo {
-    fn update(&mut self, msg: Message, cmds: &mut Commands<Message>) {
+impl Update<Message, Command> for Todo {
+    fn update(&mut self, msg: Message, cmds: &mut Vec<Command>) {
         use Message::*;
 
         match msg {
             Noop => {}
-            cmd @ FocusPending => {
-                cmds.push(Command::new(cmd, focus_pending_input));
-            }
             UpdatePending(text) => {
                 self.pending_item = text
             }
@@ -130,10 +128,7 @@ impl Update<Message> for Todo {
             }
             EditTodo(i) => {
                 self.pending_edit = Some((i, self.items[i].text.clone()));
-                self.update(FocusEdit, cmds);
-            }
-            cmd @ FocusEdit => {
-                cmds.push(Command::new(cmd, focus_edit_input));
+                cmds.push(Command::FocusEdit);
             }
             UpdateEdit(text) => {
                 match self.pending_edit {
@@ -177,98 +172,77 @@ impl Update<Message> for Todo {
             ShowAll(push_history) => {
                 self.filter = Filter::All;
                 if push_history {
-                    self.update(Message::PushHistory("#/".to_owned()), cmds);
+                    cmds.push(Command::PushHistory("#/".to_owned()));
                 }
             }
             ShowActive(push_history) => {
                 self.filter = Filter::Active;
                 if push_history {
-                    self.update(Message::PushHistory("#/active".to_owned()), cmds);
+                    cmds.push(Command::PushHistory("#/active".to_owned()));
                 }
             }
             ShowCompleted(push_history) => {
                 self.filter = Filter::Completed;
                 if push_history {
-                    self.update(Message::PushHistory("#/completed".to_owned()), cmds);
+                    cmds.push(Command::PushHistory("#/completed".to_owned()));
                 }
             }
-            cmd @ PushHistory(_) => {
-                cmds.push(Command::new(cmd, update_history));
-            }
             ItemsChanged => {
-                self.update(UpdateStorage(serde_json::to_string(&self.items).unwrap()), cmds);
-            }
-            cmd @ UpdateStorage(_) => {
-                cmds.push(Command::new(cmd, update_storage));
+                cmds.push(Command::UpdateStorage(serde_json::to_string(&self.items).unwrap()));
             }
         }
     }
 }
 
-fn focus_pending_input(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
-    match msg {
-        Message::FocusPending => {
-            let pending_input = web_sys::window()
-                .expect("couldn't get window handle")
-                .document()
-                .expect("couldn't get document handle")
-                .query_selector("section.todoapp header.header input.new-todo")
-                .expect("error querying for element")
-                .expect("expected to find an input element")
-                .dyn_into::<web_sys::HtmlInputElement>()
-                .expect_throw("expected web_sys::HtmlInputElement");
+impl SideEffect<Message> for Command {
+    fn process(self, _: Dispatcher<Message>) {
+        use Command::*;
 
-            pending_input.focus().expect_throw("error focusing input");
+        match self {
+            FocusPending => {
+                let pending_input = web_sys::window()
+                    .expect("couldn't get window handle")
+                    .document()
+                    .expect("couldn't get document handle")
+                    .query_selector("section.todoapp header.header input.new-todo")
+                    .expect("error querying for element")
+                    .expect("expected to find an input element")
+                    .dyn_into::<web_sys::HtmlInputElement>()
+                    .expect_throw("expected web_sys::HtmlInputElement");
+
+                pending_input.focus().expect_throw("error focusing input");
+            }
+            FocusEdit => {
+                let edit_input = web_sys::window()
+                    .expect("couldn't get window handle")
+                    .document()
+                    .expect("couldn't get document handle")
+                    .query_selector("section.todoapp section.main input.edit")
+                    .expect("error querying for element")
+                    .expect("expected to find an input element")
+                    .dyn_into::<web_sys::HtmlInputElement>()
+                    .expect_throw("expected web_sys::HtmlInputElement");
+
+                edit_input.focus().expect_throw("error focusing input");
+            }
+            PushHistory(url) => {
+                let history = web_sys::window()
+                    .expect("couldn't get window handle")
+                    .history()
+                    .expect_throw("couldn't get history handle");
+
+                history.push_state_with_url(&JsValue::NULL, TITLE, Some(&url)).expect_throw("error updating history");
+            }
+            UpdateStorage(data) => {
+                let local_storage = web_sys::window()
+                    .expect("couldn't get window handle")
+                    .local_storage()
+                    .expect("couldn't get local storage handle")
+                    .expect_throw("local storage not supported?");
+
+                local_storage.set_item("todo-euca", &data).unwrap_throw();
+            }
         }
-        _ => unreachable!("focus_pending_input should only be called with FocusPending. Called with: {:?}", msg),
-    }
-}
-
-fn focus_edit_input(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
-    match msg {
-        Message::FocusEdit => {
-            let edit_input = web_sys::window()
-                .expect("couldn't get window handle")
-                .document()
-                .expect("couldn't get document handle")
-                .query_selector("section.todoapp section.main input.edit")
-                .expect("error querying for element")
-                .expect("expected to find an input element")
-                .dyn_into::<web_sys::HtmlInputElement>()
-                .expect_throw("expected web_sys::HtmlInputElement");
-
-            edit_input.focus().expect_throw("error focusing input");
-        }
-        _ => unreachable!("focus_edit_input should only be called with FocusEdit. Called with: {:?}", msg),
-    }
-}
-
-fn update_history(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
-    let history = web_sys::window()
-        .expect("couldn't get window handle")
-        .history()
-        .expect_throw("couldn't get history handle");
-
-    match msg {
-        Message::PushHistory(url) => {
-            history.push_state_with_url(&JsValue::NULL, TITLE, Some(&url)).expect_throw("error updating history");
-        }
-        _ => unreachable!("this should only be called with PushHistory. Called with: {:?}", msg),
-    }
-}
-
-fn update_storage(msg: Message, _: Rc<RefCell<dyn Dispatch<Message>>>) {
-    let local_storage = web_sys::window()
-        .expect("couldn't get window handle")
-        .local_storage()
-        .expect("couldn't get local storage handle")
-        .expect_throw("local storage not supported?");
-
-    match msg {
-        Message::UpdateStorage(data) => {
-            local_storage.set_item("todo-euca", &data).unwrap_throw();
-        }
-        _ => unreachable!("this should only be called with UpdateStorage. Called with: {:?}", msg),
     }
 }
 
@@ -533,7 +507,7 @@ pub fn main() -> Result<(), JsValue> {
         .router(Router::default())
         .attach(parent, Todo::with_items(items));
 
-    App::dispatch(app, Message::FocusPending);
+    Command::FocusPending.process(app);
 
     info!("{} initialized", TITLE);
     
@@ -704,6 +678,7 @@ mod tests {
     #[test]
     fn storage_triggers() {
         use Message::*;
+        use Command::*;
 
         let mut todomvc = Todo::default();
         todomvc.items.push(Item::default());
@@ -719,7 +694,6 @@ mod tests {
             ClearCompleted,
             ToggleAll,
             ItemsChanged,
-            UpdateStorage("".to_owned())
         ] {
             // do necessary prep work
             match msg {
@@ -732,7 +706,7 @@ mod tests {
 
             // verify the proper commands was generated
             assert!(
-                cmds.iter().any(|cmd| match cmd.msg {
+                cmds.iter().any(|cmd| match cmd {
                     UpdateStorage(_) => true,
                     _ => false,
                 }),
