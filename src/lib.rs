@@ -522,10 +522,8 @@ mod tests {
     fn add_todo() {
         let mut todomvc = Todo::default();
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::UpdatePending("item".to_owned()), &mut cmds);
-        todomvc.update(Message::AddTodo, &mut cmds);
+        todomvc.update(Message::UpdatePending("item".to_owned()), &mut vec![]);
+        todomvc.update(Message::AddTodo, &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "item");
@@ -537,9 +535,7 @@ mod tests {
         let mut todomvc = Todo::default();
         todomvc.items.push(Item::default());
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::RemoveTodo(0), &mut cmds);
+        todomvc.update(Message::RemoveTodo(0), &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 0);
     }
@@ -549,9 +545,7 @@ mod tests {
         let mut todomvc = Todo::default();
         todomvc.items.push(Item::default());
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::ToggleTodo(0), &mut cmds);
+        todomvc.update(Message::ToggleTodo(0), &mut vec![]);
 
         assert_eq!(todomvc.items[0].is_complete, true);
     }
@@ -564,11 +558,9 @@ mod tests {
             .. Item::default()
         });
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::EditTodo(0), &mut cmds);
-        todomvc.update(Message::UpdateEdit("".to_owned()), &mut cmds);
-        todomvc.update(Message::SaveEdit, &mut cmds);
+        todomvc.update(Message::EditTodo(0), &mut vec![]);
+        todomvc.update(Message::UpdateEdit("".to_owned()), &mut vec![]);
+        todomvc.update(Message::SaveEdit, &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 0);
     }
@@ -581,11 +573,9 @@ mod tests {
             .. Item::default()
         });
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::EditTodo(0), &mut cmds);
-        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut cmds);
-        todomvc.update(Message::SaveEdit, &mut cmds);
+        todomvc.update(Message::EditTodo(0), &mut vec![]);
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut vec![]);
+        todomvc.update(Message::SaveEdit, &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "edited text");
@@ -599,11 +589,9 @@ mod tests {
             .. Item::default()
         });
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::EditTodo(0), &mut cmds);
-        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut cmds);
-        todomvc.update(Message::AbortEdit, &mut cmds);
+        todomvc.update(Message::EditTodo(0), &mut vec![]);
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut vec![]);
+        todomvc.update(Message::AbortEdit, &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "text");
@@ -626,9 +614,7 @@ mod tests {
             .. Item::default()
         });
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::ClearCompleted, &mut cmds);
+        todomvc.update(Message::ClearCompleted, &mut vec![]);
 
         assert_eq!(todomvc.items.len(), 2);
         assert_eq!(todomvc.items[0].text, "text1");
@@ -652,12 +638,10 @@ mod tests {
             .. Item::default()
         });
 
-        let mut cmds = vec![];
-
-        todomvc.update(Message::ToggleAll, &mut cmds);
+        todomvc.update(Message::ToggleAll, &mut vec![]);
         assert!(todomvc.items.iter().all(|item| item.is_complete));
 
-        todomvc.update(Message::ToggleAll, &mut cmds);
+        todomvc.update(Message::ToggleAll, &mut vec![]);
         assert!(todomvc.items.iter().all(|item| !item.is_complete));
     }
 
