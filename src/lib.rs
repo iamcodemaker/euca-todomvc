@@ -94,6 +94,7 @@ enum Message {
     ItemsChanged,
 }
 
+#[derive(Clone)]
 enum Command {
     FocusPending,
     FocusEdit,
@@ -102,7 +103,7 @@ enum Command {
 }
 
 impl Update<Message, Command> for Todo {
-    fn update(&mut self, msg: Message, cmds: &mut Vec<Command>) {
+    fn update(&mut self, msg: Message, cmds: &mut Commands<Command>) {
         use Message::*;
 
         match msg {
@@ -128,7 +129,7 @@ impl Update<Message, Command> for Todo {
             }
             EditTodo(i) => {
                 self.pending_edit = Some((i, self.items[i].text.clone()));
-                cmds.push(Command::FocusEdit);
+                cmds.post_render.push(Command::FocusEdit);
             }
             UpdateEdit(text) => {
                 match self.pending_edit {
@@ -195,7 +196,7 @@ impl Update<Message, Command> for Todo {
 }
 
 impl SideEffect<Message> for Command {
-    fn process(self, _: Dispatcher<Message>) {
+    fn process(self, _: &Dispatcher<Message, Command>) {
         use Command::*;
 
         match self {
@@ -266,8 +267,8 @@ fn read_items_from_storage() -> Vec<Item> {
         )
 }
 
-impl Render<dom::DomVec<Message>> for Todo {
-    fn render(&self) -> dom::DomVec<Message> {
+impl Render<dom::DomVec<Message, Command>> for Todo {
+    fn render(&self) -> dom::DomVec<Message, Command> {
         use dom::Dom;
         use dom::Handler::Event;
 
@@ -416,7 +417,7 @@ impl Render<dom::DomVec<Message>> for Todo {
 }
 
 impl Item {
-    fn render(&self, i: usize, pending_edit: Option<&str>) -> dom::Dom<Message> {
+    fn render(&self, i: usize, pending_edit: Option<&str>) -> dom::Dom<Message, Command> {
         use dom::Dom;
         use dom::Handler::{Event,InputValue};
 
@@ -507,7 +508,7 @@ pub fn main() -> Result<(), JsValue> {
         .router(Router::default())
         .attach(parent, Todo::with_items(items));
 
-    Command::FocusPending.process(app);
+    Command::FocusPending.process(&app.into());
 
     info!("{} initialized", TITLE);
     
@@ -517,13 +518,14 @@ pub fn main() -> Result<(), JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use euca::app::Commands;
 
     #[test]
     fn add_todo() {
         let mut todomvc = Todo::default();
 
-        todomvc.update(Message::UpdatePending("item".to_owned()), &mut vec![]);
-        todomvc.update(Message::AddTodo, &mut vec![]);
+        todomvc.update(Message::UpdatePending("item".to_owned()), &mut Commands::default());
+        todomvc.update(Message::AddTodo, &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "item");
@@ -535,7 +537,7 @@ mod tests {
         let mut todomvc = Todo::default();
         todomvc.items.push(Item::default());
 
-        todomvc.update(Message::RemoveTodo(0), &mut vec![]);
+        todomvc.update(Message::RemoveTodo(0), &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 0);
     }
@@ -545,7 +547,7 @@ mod tests {
         let mut todomvc = Todo::default();
         todomvc.items.push(Item::default());
 
-        todomvc.update(Message::ToggleTodo(0), &mut vec![]);
+        todomvc.update(Message::ToggleTodo(0), &mut Commands::default());
 
         assert_eq!(todomvc.items[0].is_complete, true);
     }
@@ -558,9 +560,9 @@ mod tests {
             .. Item::default()
         });
 
-        todomvc.update(Message::EditTodo(0), &mut vec![]);
-        todomvc.update(Message::UpdateEdit("".to_owned()), &mut vec![]);
-        todomvc.update(Message::SaveEdit, &mut vec![]);
+        todomvc.update(Message::EditTodo(0), &mut Commands::default());
+        todomvc.update(Message::UpdateEdit("".to_owned()), &mut Commands::default());
+        todomvc.update(Message::SaveEdit, &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 0);
     }
@@ -573,9 +575,9 @@ mod tests {
             .. Item::default()
         });
 
-        todomvc.update(Message::EditTodo(0), &mut vec![]);
-        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut vec![]);
-        todomvc.update(Message::SaveEdit, &mut vec![]);
+        todomvc.update(Message::EditTodo(0), &mut Commands::default());
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut Commands::default());
+        todomvc.update(Message::SaveEdit, &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "edited text");
@@ -589,9 +591,9 @@ mod tests {
             .. Item::default()
         });
 
-        todomvc.update(Message::EditTodo(0), &mut vec![]);
-        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut vec![]);
-        todomvc.update(Message::AbortEdit, &mut vec![]);
+        todomvc.update(Message::EditTodo(0), &mut Commands::default());
+        todomvc.update(Message::UpdateEdit(" edited text  ".to_owned()), &mut Commands::default());
+        todomvc.update(Message::AbortEdit, &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 1);
         assert_eq!(todomvc.items[0].text, "text");
@@ -614,7 +616,7 @@ mod tests {
             .. Item::default()
         });
 
-        todomvc.update(Message::ClearCompleted, &mut vec![]);
+        todomvc.update(Message::ClearCompleted, &mut Commands::default());
 
         assert_eq!(todomvc.items.len(), 2);
         assert_eq!(todomvc.items[0].text, "text1");
@@ -638,10 +640,10 @@ mod tests {
             .. Item::default()
         });
 
-        todomvc.update(Message::ToggleAll, &mut vec![]);
+        todomvc.update(Message::ToggleAll, &mut Commands::default());
         assert!(todomvc.items.iter().all(|item| item.is_complete));
 
-        todomvc.update(Message::ToggleAll, &mut vec![]);
+        todomvc.update(Message::ToggleAll, &mut Commands::default());
         assert!(todomvc.items.iter().all(|item| !item.is_complete));
     }
 
@@ -681,16 +683,16 @@ mod tests {
         ] {
             // do necessary prep work
             match msg {
-                SaveEdit => todomvc.update(EditTodo(0), &mut vec![]),
+                SaveEdit => todomvc.update(EditTodo(0), &mut Commands::default()),
                 _ => {}
             }
 
-            let mut cmds = vec![];
+            let mut cmds = Commands::default();
             todomvc.update(msg.clone(), &mut cmds);
 
-            // verify the proper commands was generated
+            // verify the proper commands were generated
             assert!(
-                cmds.iter().any(|cmd| match cmd {
+                cmds.immediate.iter().any(|cmd| match cmd {
                     UpdateStorage(_) => true,
                     _ => false,
                 }),
