@@ -314,14 +314,15 @@ impl Render<dom::DomVec<Message, Command>> for Todo {
                 .push(Dom::elem("ul")
                     .attr("class", "todo-list")
                     .extend(self.items.iter()
-                        .filter(|item| {
+                        .enumerate()
+                        .filter(|(_, item)| {
                             match self.filter {
                                 Filter::All => true,
                                 Filter::Active => !item.is_complete,
                                 Filter::Completed => item.is_complete,
                             }
                         })
-                        .enumerate().map(|(i, item)| {
+                        .map(|(i, item)| {
                             match self.pending_edit {
                                 Some((pending_i, ref pending_edit)) if pending_i == i => {
                                     item.render(i, Some(pending_edit))
