@@ -215,12 +215,12 @@ impl SideEffect<Message> for Command {
             }
             FocusEdit => {
                 let edit_input = web_sys::window()
-                    .expect("couldn't get window handle")
+                    .expect_throw("couldn't get window handle")
                     .document()
-                    .expect("couldn't get document handle")
+                    .expect_throw("couldn't get document handle")
                     .query_selector("section.todoapp section.main input.edit")
-                    .expect("error querying for element")
-                    .expect("expected to find an input element")
+                    .expect_throw("error querying for element")
+                    .expect_throw("expected to find an input element")
                     .dyn_into::<web_sys::HtmlInputElement>()
                     .expect_throw("expected web_sys::HtmlInputElement");
 
