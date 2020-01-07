@@ -77,7 +77,6 @@ struct Item {
 
 #[derive(PartialEq,Clone,Debug)]
 enum Message {
-    Noop,
     UpdatePending(String),
     AddTodo,
     RemoveTodo(usize),
@@ -107,7 +106,6 @@ impl Update<Message, Command> for Todo {
         use Message::*;
 
         match msg {
-            Noop => {}
             UpdatePending(text) => {
                 self.pending_item = text
             }
@@ -282,13 +280,13 @@ impl Render<dom::DomVec<Message, Command>> for Todo {
                 .attr("autofocus", "true")
                 .attr("value", self.pending_item.to_owned())
                 .on("input", dom::Handler::InputValue(|s| {
-                    Message::UpdatePending(s)
+                    Some(Message::UpdatePending(s))
                 }))
                 .on("keyup", Event(|e| {
                     let e = e.dyn_into::<web_sys::KeyboardEvent>().expect_throw("expected web_sys::KeyboardEvent");
                     match e.key().as_ref() {
-                        "Enter" => Message::AddTodo,
-                        _ => Message::Noop,
+                        "Enter" => Some(Message::AddTodo),
+                        _ => None,
                     }
                 }))
             )
@@ -366,7 +364,7 @@ impl Render<dom::DomVec<Message, Command>> for Todo {
                                 .push("All")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowAll(true)
+                                    Some(Message::ShowAll(true))
                                 }))
                             )
                         )
@@ -380,7 +378,7 @@ impl Render<dom::DomVec<Message, Command>> for Todo {
                                 .push("Active")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowActive(true)
+                                    Some(Message::ShowActive(true))
                                 }))
                             )
                         )
@@ -394,7 +392,7 @@ impl Render<dom::DomVec<Message, Command>> for Todo {
                                 .push("Completed")
                                 .on("click", Event(|e| {
                                     e.prevent_default();
-                                    Message::ShowCompleted(true)
+                                    Some(Message::ShowCompleted(true))
                                 }))
                             )
                         )
@@ -430,15 +428,15 @@ impl Item {
                     .attr("class", "edit")
                     .attr("value", pending_edit)
                     .on("input", InputValue(|s| {
-                        Message::UpdateEdit(s)
+                        Some(Message::UpdateEdit(s))
                     }))
                     .event("blur", Message::SaveEdit)
                     .on("keyup", Event(|e| {
                         let e = e.dyn_into::<web_sys::KeyboardEvent>().expect_throw("expected web_sys::KeyboardEvent");
                         match e.key().as_ref() {
-                            "Enter" => Message::SaveEdit,
-                            "Escape" => Message::AbortEdit,
-                            _ => Message::Noop,
+                            "Enter" => Some(Message::SaveEdit),
+                            "Escape" => Some(Message::AbortEdit),
+                            _ => None,
                         }
                     }))
                 )
